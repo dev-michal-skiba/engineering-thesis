@@ -1,0 +1,8 @@
+# PyCharm files
+.idea/
+# virtual environment
+venv/
+# database volume
+db_data/
+# cache
+**/__pycache__/
