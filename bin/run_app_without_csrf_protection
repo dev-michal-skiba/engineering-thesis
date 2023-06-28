@@ -1,0 +1,2 @@
+#!/bin/bash
+CSRF_PROTECTION_METHOD=OFF docker-compose up

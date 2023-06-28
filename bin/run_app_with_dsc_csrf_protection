@@ -1,0 +1,2 @@
+#!/bin/bash
+CSRF_PROTECTION_METHOD=DOUBLE_SUBMIT_COOKIE docker-compose up

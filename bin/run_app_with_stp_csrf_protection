@@ -1,0 +1,2 @@
+#!/bin/bash
+CSRF_PROTECTION_METHOD=SYNCHRONIZER_TOKEN_PATTERN docker-compose up

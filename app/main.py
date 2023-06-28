@@ -1,16 +1,26 @@
 import os
 from typing import Annotated
 
+import csrf
 from db.models import User
 from db.schemas import UserCreate, UserEdit, UserLogin
-from fastapi import Body, Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
+from starlette.exceptions import HTTPException
 
 app = FastAPI()
+api_router = APIRouter()
+
+
+@app.middleware("http")
+async def csrf_protection_response(request: Request, call_next):
+    response = await call_next(request)
+    csrf.update_csrf_cookie(response)
+    return response
 
 
 class AuthJWTSettings(BaseModel):
@@ -32,7 +42,7 @@ def authjwt_exception_handler(request: Request, exc: AuthJWTException):
     )
 
 
-@app.post('/register', status_code=status.HTTP_201_CREATED)
+@api_router.post('/register', status_code=status.HTTP_201_CREATED)
 async def register(user_data: Annotated[UserCreate, Body(embed=False)]):
     try:
         User.create(user_data.username, user_data.email, user_data.password)
@@ -41,9 +51,10 @@ async def register(user_data: Annotated[UserCreate, Body(embed=False)]):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='User with given username/email already exists'
         )
+    return
 
 
-@app.post('/login', status_code=status.HTTP_204_NO_CONTENT)
+@api_router.post('/login', status_code=status.HTTP_204_NO_CONTENT)
 async def login(
     user_data: Annotated[UserLogin, Body(embed=False)], auth: AuthJWT = Depends()
 ):
@@ -58,7 +69,7 @@ async def login(
     auth.set_refresh_cookies(refresh_token)
 
 
-@app.post('/refresh', status_code=status.HTTP_204_NO_CONTENT)
+@api_router.post('/refresh', status_code=status.HTTP_204_NO_CONTENT)
 async def refresh(auth: AuthJWT = Depends()):
     auth.jwt_refresh_token_required()
     current_user = auth.get_jwt_subject()
@@ -66,13 +77,13 @@ async def refresh(auth: AuthJWT = Depends()):
     auth.set_access_cookies(new_access_token)
 
 
-@app.post('/logout', status_code=status.HTTP_204_NO_CONTENT)
+@api_router.post('/logout', status_code=status.HTTP_204_NO_CONTENT)
 async def logout(auth: AuthJWT = Depends()):
     auth.jwt_required()
     auth.unset_jwt_cookies()
 
 
-@app.get('/user', status_code=status.HTTP_200_OK)
+@api_router.get('/user', status_code=status.HTTP_200_OK)
 async def view_user(auth: AuthJWT = Depends()):
     auth.jwt_required()
     username = auth.get_jwt_subject()
@@ -85,7 +96,7 @@ async def view_user(auth: AuthJWT = Depends()):
     return user
 
 
-@app.patch('/user', status_code=status.HTTP_204_NO_CONTENT)
+@api_router.patch('/user', status_code=status.HTTP_204_NO_CONTENT)
 async def edit_user(
     user_data: Annotated[UserEdit, Body(embed=False)], auth: AuthJWT = Depends()
 ):
@@ -99,7 +110,7 @@ async def edit_user(
         )
 
 
-@app.delete('/user', status_code=status.HTTP_204_NO_CONTENT)
+@api_router.delete('/user', status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(auth: AuthJWT = Depends()):
     auth.jwt_required()
     username = auth.get_jwt_subject()
@@ -110,3 +121,15 @@ async def delete_user(auth: AuthJWT = Depends()):
             detail='Cannot delete user'
         )
     auth.unset_jwt_cookies()
+
+
+@api_router.get('/session', status_code=status.HTTP_200_OK)
+async def session():
+    pass
+
+
+async def csrf_protection_request(request: Request):
+    await csrf.apply_csrf_protection(request)
+
+
+app.include_router(api_router, dependencies=[Depends(csrf_protection_request)])
